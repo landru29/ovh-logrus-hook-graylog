@@ -17,6 +17,7 @@ const retries = 5
 
 // GraylogMessage is a message for graylog
 type GraylogMessage struct {
+	Full    string       `json:"full"`
 	Message string       `json:"message"`
 	Token   string       `json:"X-OVH-TOKEN"`
 	Host    string       `json:"host"`
@@ -83,6 +84,7 @@ func (hook *GraylogHook) Fire(entry *logrus.Entry) error {
 	msg := regexMessage.ReplaceAllString(entry.Message, "")
 
 	messageBytes, err = json.Marshal(GraylogMessage{
+		Full:    entry.Message,
 		Message: msg,
 		Token:   hook.token,
 		Host:    hook.host,
