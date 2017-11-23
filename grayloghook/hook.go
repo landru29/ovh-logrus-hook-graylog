@@ -17,13 +17,14 @@ const retries = 5
 
 // GraylogMessage is a message for graylog
 type GraylogMessage struct {
-	Full    string       `json:"full"`
+	Version string       `json:"version"`
+	Full    string       `json:"full_message"`
 	Message string       `json:"message"`
 	Token   string       `json:"X-OVH-TOKEN"`
 	Host    string       `json:"host"`
 	Title   string       `json:"title"`
 	Level   logrus.Level `json:"level"`
-	Time    time.Time    `json:"time"`
+	Time    int64        `json:"timestamp"`
 }
 
 // GraylogHook is a writer for graylog
@@ -74,9 +75,9 @@ func (hook *GraylogHook) Fire(entry *logrus.Entry) error {
 
 	// extract title
 	regexTitle := regexp.MustCompile(`\[(.*?)\]`)
-	matches := regexTitle.FindAllString(entry.Message, 1)
-	if len(matches) > 0 {
-		title = matches[0]
+	matches := regexTitle.FindStringSubmatch(entry.Message)
+	if len(matches) > 1 {
+		title = matches[1]
 	}
 
 	// clean title
@@ -84,17 +85,19 @@ func (hook *GraylogHook) Fire(entry *logrus.Entry) error {
 	msg := regexMessage.ReplaceAllString(entry.Message, "")
 
 	messageBytes, err = json.Marshal(GraylogMessage{
+		Version: "1.1",
 		Full:    entry.Message,
 		Message: msg,
 		Token:   hook.token,
 		Host:    hook.host,
 		Title:   title,
 		Level:   entry.Level,
-		Time:    entry.Time,
+		Time:    entry.Time.Unix(),
 	})
 	if err != nil {
 		return err
 	}
+
 	messageBytes = append(messageBytes, byte(0))
 
 	if err := hook.connect(); err != nil {
