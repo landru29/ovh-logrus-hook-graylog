@@ -114,7 +114,9 @@ func (hook *GraylogHook) Fire(entry *logrus.Entry) error {
 		}
 	}
 
-	fmt.Printf("[graylog] Error while sending message: %s\n", err.Error())
+	if err != nil {
+		fmt.Printf("[graylog] Error while sending message: %s\n", err.Error())
+	}
 
 	return err
 }
