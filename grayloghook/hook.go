@@ -15,18 +15,6 @@ import (
 
 const retries = 5
 
-// GraylogMessage is a message for graylog
-type GraylogMessage struct {
-	Version string       `json:"version"`
-	Full    string       `json:"full_message"`
-	Message string       `json:"message"`
-	Token   string       `json:"X-OVH-TOKEN"`
-	Host    string       `json:"host"`
-	Title   string       `json:"title"`
-	Level   logrus.Level `json:"level"`
-	Time    int64        `json:"timestamp"`
-}
-
 // GraylogHook is a writer for graylog
 type GraylogHook struct {
 	conn   io.WriteCloser
@@ -67,6 +55,17 @@ func NewGraylogHook(addr string, token string, host string, tlsCfg *tls.Config) 
 	}
 }
 
+func enrich(fields logrus.Fields, hook *GraylogHook) logrus.Fields {
+	result := make(logrus.Fields)
+	for index, data := range fields {
+		result[index] = data
+	}
+	result["X-OVH-TOKEN"] = hook.token
+	result["host"] = hook.host
+	result["version"] = "1.1"
+	return result
+}
+
 //Fire is invoked each time a log is thrown
 func (hook *GraylogHook) Fire(entry *logrus.Entry) error {
 	var err error
@@ -84,34 +83,32 @@ func (hook *GraylogHook) Fire(entry *logrus.Entry) error {
 	regexMessage := regexp.MustCompile(`\[.*?\]`)
 	msg := regexMessage.ReplaceAllString(entry.Message, "")
 
-	messageBytes, err = json.Marshal(GraylogMessage{
-		Version: "1.1",
-		Full:    entry.Message,
-		Message: msg,
-		Token:   hook.token,
-		Host:    hook.host,
-		Title:   title,
-		Level:   entry.Level,
-		Time:    entry.Time.Unix(),
-	})
+	logData := enrich(entry.Data, hook)
+	logData["level"] = entry.Level
+	logData["message"] = msg
+	logData["timestamp"] = entry.Time.Unix()
+
+	if len(title) > 0 {
+		logData["title"] = title
+	}
+
+	messageBytes, err = json.Marshal(logData)
 	if err != nil {
 		return err
 	}
 
 	messageBytes = append(messageBytes, byte(0))
 
-	if err := hook.connect(); err != nil {
-		return err
-	}
-
 	for i := 0; i < retries; i++ {
+		if err = hook.connect(); err != nil {
+			continue
+		}
+
 		_, err = io.Copy(hook.conn, bytes.NewBuffer(messageBytes))
 		if err == nil {
 			return nil
 		}
-		if err = hook.connect(); err != nil {
-			return err
-		}
+
 	}
 
 	if err != nil {
