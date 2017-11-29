@@ -85,7 +85,7 @@ func (hook *GraylogHook) Fire(entry *logrus.Entry) error {
 
 	logData := enrich(entry.Data, hook)
 	logData["level"] = entry.Level
-	logData["message"] = msg
+	logData["msg"] = msg
 	logData["timestamp"] = entry.Time.Unix()
 
 	if len(title) > 0 {
