@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"regexp"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -66,56 +65,45 @@ func enrich(fields logrus.Fields, hook *GraylogHook) logrus.Fields {
 	return result
 }
 
-//Fire is invoked each time a log is thrown
-func (hook *GraylogHook) Fire(entry *logrus.Entry) error {
-	var err error
-	title := ""
-	messageBytes := []byte{}
-
-	// extract title
-	regexTitle := regexp.MustCompile(`\[(.*?)\]`)
-	matches := regexTitle.FindStringSubmatch(entry.Message)
-	if len(matches) > 1 {
-		title = matches[1]
-	}
-
-	// clean title
-	regexMessage := regexp.MustCompile(`\[.*?\]`)
-	msg := regexMessage.ReplaceAllString(entry.Message, "")
-
-	logData := enrich(entry.Data, hook)
-	logData["level"] = entry.Level
-	logData["msg"] = msg
-	logData["timestamp"] = entry.Time.Unix()
-
-	if len(title) > 0 {
-		logData["title"] = title
-	}
-
-	messageBytes, err = json.Marshal(logData)
-	if err != nil {
-		return err
-	}
-
-	messageBytes = append(messageBytes, byte(0))
+func (hook *GraylogHook) sendData(data []byte) error {
+	messageBytes := append(data, byte(0))
 
 	for i := 0; i < retries; i++ {
-		if err = hook.connect(); err != nil {
+		if err := hook.connect(); err != nil {
 			continue
 		}
 
-		_, err = io.Copy(hook.conn, bytes.NewBuffer(messageBytes))
+		_, err := io.Copy(hook.conn, bytes.NewBuffer(messageBytes))
 		if err == nil {
 			return nil
 		}
 
 	}
+	return fmt.Errorf("[graylog] Log not sent")
+}
 
+//Fire is invoked each time a log is thrown
+func (hook *GraylogHook) Fire(entry *logrus.Entry) error {
+	var err error
+	messageBytes := []byte{}
+
+	logData := enrich(entry.Data, hook)
+	logData["level"] = entry.Level
+	logData["msg"] = entry.Message
+	logData["timestamp"] = entry.Time.Unix()
+
+	messageBytes, err = json.Marshal(logData)
 	if err != nil {
-		fmt.Printf("[graylog] Error while sending message: %s\n", err.Error())
+		fmt.Printf("[json] Fail to marshal: %s\n", err.Error())
+		return err
 	}
 
-	return err
+	if err := hook.sendData(messageBytes); err != nil {
+		fmt.Printf("[graylog] Error while sending message: %s\n", err.Error())
+		return err
+	}
+
+	return nil
 }
 
 // Levels returns the available logging levels.
