@@ -66,20 +66,21 @@ func enrich(fields logrus.Fields, hook *GraylogHook) logrus.Fields {
 }
 
 func (hook *GraylogHook) sendData(data []byte) error {
+	var err error
 	messageBytes := append(data, byte(0))
 
 	for i := 0; i < retries; i++ {
-		if err := hook.connect(); err != nil {
+		if err = hook.connect(); err != nil {
 			continue
 		}
 
-		_, err := io.Copy(hook.conn, bytes.NewBuffer(messageBytes))
+		_, err = io.Copy(hook.conn, bytes.NewBuffer(messageBytes))
 		if err == nil {
 			return nil
 		}
 
 	}
-	return fmt.Errorf("[graylog] Log not sent")
+	return fmt.Errorf("[graylog] Log not sent %v", err)
 }
 
 //Fire is invoked each time a log is thrown
