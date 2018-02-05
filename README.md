@@ -14,6 +14,8 @@ func main () {
     graylogHost := "gra2.logs.ovh.com:12202"
     graylogToken := "here-is-my-token"
     logger.AddHook(grayloghook.NewGraylogHook(graylogHost, graylogToken, "example.org", &tls.Config{}))
-    logger.Printf("[example]This is an example")
+    logger.WithFields(map[string]string{
+        "foo": "example",
+    }).Printf("This is an example")
 }
 ```
