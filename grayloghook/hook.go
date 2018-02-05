@@ -31,10 +31,19 @@ func (hook *GraylogHook) connect() error {
 	var err error
 
 	for i := 0; i < retries; i++ {
+
+		if hook.conn != nil { // if there was a connection object, we try to close it
+			hook.conn.Close()
+			hook.conn = nil
+		}
+
 		hook.conn, err = tls.DialWithDialer(&net.Dialer{Timeout: 5 * time.Second}, "tcp", hook.addr, hook.tlsCfg)
 		if err == nil {
 			return nil
 		}
+
+		// Something's gone wrong
+
 		time.Sleep(time.Duration(200) * time.Millisecond)
 	}
 	return err
@@ -70,14 +79,25 @@ func (hook *GraylogHook) sendData(data []byte) error {
 	messageBytes := append(data, byte(0))
 
 	for i := 0; i < retries; i++ {
-		if err = hook.connect(); err != nil {
-			continue
+		if hook.conn == nil { // no connection ?
+			if err = hook.connect(); err != nil { // try to connect
+				continue // connection failed, another retry
+			}
 		}
 
 		_, err = io.Copy(hook.conn, bytes.NewBuffer(messageBytes))
 		if err == nil {
 			return nil
 		}
+
+		// Something's gone wrong
+
+		if hook.conn != nil { // if there was a connection object, we try to close it
+			hook.conn.Close()
+		}
+
+		// delete the connection object as it is not useful anymore
+		hook.conn = nil
 
 	}
 	return fmt.Errorf("[graylog] Log not sent %v", err)
